@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Geocodificador de Envíos AMBA/GBA - USIG</title>
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <style>
+    body { background-color: #f8f9fa; }
+    .table-responsive { max-height: 600px; overflow-y: auto; }
+    .badge-status { font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+
+  <div class="container-fluid py-4 px-4">
+    <div class="row mb-4">
+      <div class="col-12">
+        <div class="card shadow-sm border-0">
+          <div class="card-body">
+            <h2 class="card-title h4 text-primary"><i class="bi bi-geo-alt-fill me-2"></i>Geocodificador de Direcciones AMBA (USIG)</h2>
+            <p class="text-muted mb-3">Cargá un archivo CSV con tus entregas para normalizar las direcciones, obtener coordenadas Lat/Lng y generar links a Google Maps.</p>
+            
+            <div class="row g-3 align-items-center">
+              <div class="col-md-6">
+                <input class="form-control" type="file" id="csvFile" accept=".csv">
+              </div>
+              <div class="col-md-6">
+                <button id="btnProcesar" class="btn btn-primary" disabled>
+                  <i class="bi bi-play-fill me-1"></i> Procesar y Geocodificar
+                </button>
+                <button id="btnExportar" class="btn btn-outline-success ms-2" disabled>
+                  <i class="bi bi-file-earmark-spreadsheet me-1"></i> Exportar CSV Resultado
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Métrica y Estadísticas -->
+    <div class="row mb-3 d-none" id="statsRow">
+      <div class="col-md-3">
+        <div class="card border-0 shadow-sm text-center py-2">
+          <div class="text-muted small">Total Registros</div>
+          <div class="h4 m-0" id="totalRows">0</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card border-0 shadow-sm text-center py-2 border-start border-success border-4">
+          <div class="text-muted small">Geocodificados OK</div>
+          <div class="h4 m-0 text-success" id="successRows">0</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card border-0 shadow-sm text-center py-2 border-start border-danger border-4">
+          <div class="text-muted small">Con Error / Sin Ubicación</div>
+          <div class="h4 m-0 text-danger" id="errorRows">0</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card border-0 shadow-sm text-center py-2">
+          <div class="text-muted small">Progreso</div>
+          <div class="h4 m-0 text-primary" id="progressPercent">0%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabla de Resultados -->
+    <div class="row">
+      <div class="col-12">
+        <div class="card shadow-sm border-0">
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-hover table-striped align-middle mb-0" id="resultsTable">
+                <thead class="table-dark sticky-top">
+                  <tr>
+                    <th>#</th>
+                    <th>Cliente</th>
+                    <th>Dirección Ingresada</th>
+                    <th>Localidad / Partido</th>
+                    <th>Dirección Normalizada (USIG)</th>
+                    <th>Latitud</th>
+                    <th>Longitud</th>
+                    <th>Estado</th>
+                    <th>Mapa</th>
+                  </tr>
+                </thead>
+                <tbody id="tableBody">
+                  <tr>
+                    <td colspan="9" class="text-center py-4 text-muted">Cargá un archivo CSV para ver el listado.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PapaParse para procesamiento eficiente de CSV -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <script>
+    let csvData = [];
+    let processedData = [];
+
+    const fileInput = document.getElementById('csvFile');
+    const btnProcesar = document.getElementById('btnProcesar');
+    const btnExportar = document.getElementById('btnExportar');
+    const tableBody = document.getElementById('tableBody');
+    const statsRow = document.getElementById('statsRow');
+
+    // Listener para lectura de CSV
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        Papa.parse(file, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => {
+            csvData = results.data;
+            btnProcesar.disabled = false;
+            renderTablaInicial(csvData);
+          }
+        });
+      }
+    });
+
+    // Muestra la vista previa del CSV cargado
+    function renderTablaInicial(data) {
+      tableBody.innerHTML = '';
+      statsRow.classList.remove('d-none');
+      document.getElementById('totalRows').innerText = data.length;
+      document.getElementById('successRows').innerText = 0;
+      document.getElementById('errorRows').innerText = 0;
+      document.getElementById('progressPercent').innerText = '0%';
+
+      data.forEach((row, index) => {
+        const cliente = row.cliente || row.Cliente || row.nombre || 'N/A';
+        const direccion = `${row.direccion || row.Calle || ''} ${row.numero || row.Altura || ''}`.strip() || 'N/A';
+        const partido = row.localidad || row.partido || row.Partido || row.City || '';
+
+        const tr = document.createElement('tr');
+        tr.id = `row-${index}`;
+        tr.innerHTML = `
+          <td>${index + 1}</td>
+          <td><strong>${cliente}</strong></td>
+          <td>${direccion}</td>
+          <td>${partido}</td>
+          <td class="text-muted">-</td>
+          <td class="text-muted">-</td>
+          <td class="text-muted">-</td>
+          <td><span class="badge bg-secondary badge-status">Pendiente</span></td>
+          <td>-</td>
+        `;
+        tableBody.appendChild(tr);
+      });
+    }
+
+    // Procesa cada fila contra la API de USIG
+    btnProcesar.addEventListener('click', async () => {
+      btnProcesar.disabled = true;
+      fileInput.disabled = true;
+      processedData = [];
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (let i = 0; i < csvData.length; i++) {
+        const row = csvData[i];
+        
+        // Mapeo flexible de encabezados comunes de CSV
+        const calle = row.direccion || row.street || row.Calle || '';
+        const numero = row.numero || row.number || row.Altura || '';
+        const partido = row.partido || row.localidad || row.city || row.City || '';
+        const cliente = row.cliente || row.firstname || row.Nombre || 'Cliente';
+
+        const queryDireccion = `${calle} ${numero}, ${partido}`;
+        const geoResult = await geocodificarUSIG(queryDireccion);
+
+        const rowElement = document.getElementById(`row-${i}`);
+
+        if (geoResult.success) {
+          successCount++;
+          const mapsUrl = `https://www.google.com/maps?q=${geoResult.lat},${geoResult.lng}`;
+
+          rowElement.innerHTML = `
+            <td>${i + 1}</td>
+            <td><strong>${cliente}</strong></td>
+            <td>${calle} ${numero}</td>
+            <td>${partido}</td>
+            <td><small class="text-success">${geoResult.direccionNormalizada}</small></td>
+            <td><code>${geoResult.lat}</code></td>
+            <td><code>${geoResult.lng}</code></td>
+            <td><span class="badge bg-success badge-status">OK</span></td>
+            <td>
+              <a href="${mapsUrl}" target="_blank" class="btn btn-sm btn-outline-primary py-0 px-2">
+                <i class="bi bi-geo-alt"></i> Ver Mapa
+              </a>
+            </td>
+          `;
+
+          processedData.push({
+            ...row,
+            usig_direccion_normalizada: geoResult.direccionNormalizada,
+            latitud: geoResult.lat,
+            longitud: geoResult.lng,
+            google_maps_link: mapsUrl,
+            estado_geocodificacion: 'OK'
+          });
+
+        } else {
+          errorCount++;
+          rowElement.innerHTML = `
+            <td>${i + 1}</td>
+            <td><strong>${cliente}</strong></td>
+            <td>${calle} ${numero}</td>
+            <td>${partido}</td>
+            <td class="text-danger small">No se pudo normalizar</td>
+            <td>-</td>
+            <td>-</td>
+            <td><span class="badge bg-danger badge-status">Error</span></td>
+            <td>-</td>
+          `;
+
+          processedData.push({
+            ...row,
+            usig_direccion_normalizada: '',
+            latitud: '',
+            longitud: '',
+            google_maps_link: '',
+            estado_geocodificacion: 'ERROR'
+          });
+        }
+
+        // Actualizar Métrica de Progreso
+        document.getElementById('successRows').innerText = successCount;
+        document.getElementById('errorRows').innerText = errorCount;
+        document.getElementById('progressPercent').innerText = `${Math.round(((i + 1) / csvData.length) * 100)}%`;
+      }
+
+      btnExportar.disabled = false;
+    });
+
+    // Función que consulta el endpoint de USIG
+    async function geocodificarUSIG(query) {
+      const url = `https://servicios.usig.buenosaires.gob.ar/normalizar/?direccion=${encodeURIComponent(query)}&geocodificar=true`;
+
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.direccionesNormalizadas && data.direccionesNormalizadas.length > 0) {
+          const primeraMatch = data.direccionesNormalizadas[0];
+          if (primeraMatch.coordenadas) {
+            return {
+              success: true,
+              direccionNormalizada: primeraMatch.direccion,
+              lat: parseFloat(primeraMatch.coordenadas.y),
+              lng: parseFloat(primeraMatch.coordenadas.x)
+            };
+          }
+        }
+      } catch (err) {
+        console.error("Error al consultar USIG:", err);
+      }
+
+      return { success: false };
+    }
+
+    // Exportar archivo CSV con las coordenadas y links agregados
+    btnExportar.addEventListener('click', () => {
+      const csvContent = Papa.unparse(processedData);
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `envios_geocodificados_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+    });
+
+    // Helper de JS
+    String.prototype.strip = function() {
+      return this.replace(/^\s+|\s+$/g, "");
+    };
+  </script>
+</body>
+</html>

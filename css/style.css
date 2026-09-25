@@ -1,0 +1,38 @@
+body { 
+  background-color: #f8f9fa; 
+  font-size: 0.9rem; 
+}
+
+.table-responsive { 
+  max-height: 650px; 
+  overflow-y: auto; 
+}
+
+.badge-status { 
+  font-size: 0.8rem; 
+}
+
+table.dataTable thead th { 
+  cursor: pointer; 
+  white-space: nowrap; 
+}
+
+.email-preview-box { 
+  background: #ffffff; 
+  padding: 20px; 
+  border-radius: 8px; 
+  border: 1px solid #dee2e6;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.02);
+}
+
+.editable-input { 
+  min-width: 110px; 
+  font-size: 0.85rem; 
+}
+
+/* Estilo para los Toasts de Bootstrap */
+.toast {
+  background-color: #198754 !important;
+  color: white;
+  font-weight: 500;
+}
